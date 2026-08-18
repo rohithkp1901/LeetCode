@@ -1,4 +1,5 @@
 name: Format LeetSync Commit Messages
+
 on:
   push:
     branches: [main]
@@ -17,15 +18,17 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          OLD_MSG=$(git log -1 --pretty=%B)
+          FIRST_LINE=$(git log -1 --pretty=%B | head -n1)
 
-          # Extract "<number>. <Title>" pattern from the LeetSync message
-          if [[ $OLD_MSG =~ ([0-9]+)\.\ ([^|,\n]+) ]]; then
+          if [[ $FIRST_LINE =~ ^([0-9]+)-(.+)$ ]]; then
             NUM="${BASH_REMATCH[1]}"
-            TITLE=$(echo "${BASH_REMATCH[2]}" | sed 's/[[:space:]]*$//')
+            SLUG="${BASH_REMATCH[2]}"
+
+            TITLE=$(echo "$SLUG" | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)} 1')
+
             NEW_MSG="#${NUM} - ${TITLE} | LeetCode"
             git commit --amend -m "$NEW_MSG"
             git push --force
           else
-            echo "Pattern not found, leaving message as is: $OLD_MSG"
+            echo "Pattern not matched, leaving message as is: $FIRST_LINE"
           fi
