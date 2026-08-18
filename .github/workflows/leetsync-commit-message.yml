@@ -1,0 +1,95 @@
+name: Format LeetSync Commit Messages
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  format-leetsync-commit:
+    runs-on: ubuntu-latest
+
+    # Do not run again when this workflow creates the formatted commit.
+    if: "!contains(github.event.head_commit.message, '[skip actions]')"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Format LeetSync commit message
+        shell: bash
+        run: |
+          set -e
+
+          COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
+
+          echo "Current commit:"
+          echo "$COMMIT_MESSAGE"
+
+          # Only process commits created by LeetSync.
+          if [[ "$COMMIT_MESSAGE" != *"LeetSync"* ]]; then
+            echo "Not a LeetSync commit. Nothing to do."
+            exit 0
+          fi
+
+          # Find the problem directory changed by this commit.
+          PROBLEM_DIR="$(git diff-tree --no-commit-id --name-only -r HEAD \
+            | grep -v '^$' \
+            | cut -d/ -f1 \
+            | grep -E '^[0-9]+-' \
+            | head -n 1)"
+
+          if [ -z "$PROBLEM_DIR" ]; then
+            echo "Could not identify LeetCode problem directory."
+            exit 0
+          fi
+
+          echo "Problem directory: $PROBLEM_DIR"
+
+          # Extract problem number.
+          PROBLEM_NUMBER="$(echo "$PROBLEM_DIR" | sed -E 's/^([0-9]+)-.*/\1/')"
+
+          # Find README.md inside the problem directory.
+          README_FILE="$PROBLEM_DIR/README.md"
+
+          if [ -f "$README_FILE" ]; then
+
+            # Try to get the first Markdown heading.
+            PROBLEM_NAME="$(grep -m 1 -E '^# ' "$README_FILE" \
+              | sed -E 's/^# //')"
+
+          fi
+
+          # Fallback if README heading was not found.
+          if [ -z "$PROBLEM_NAME" ]; then
+            PROBLEM_NAME="$(echo "$PROBLEM_DIR" \
+              | sed -E 's/^[0-9]+-//' \
+              | sed 's/-/ /g' \
+              | sed -E 's/(^| )([a-z])/\1\u\2/g')"
+          fi
+
+          # Remove common README prefixes if present.
+          PROBLEM_NAME="$(echo "$PROBLEM_NAME" \
+            | sed -E 's/^LeetCode[[:space:]]*[0-9]+[.: -]*//')"
+
+          NEW_MESSAGE="#${PROBLEM_NUMBER} - ${PROBLEM_NAME} | LeetCode [skip actions]"
+
+          echo "New commit message:"
+          echo "$NEW_MESSAGE"
+
+          # Configure Git identity.
+          git config user.name "Rohith K P"
+          git config user.email "rohithkp549@gmail.com"
+
+          # Rewrite only the latest LeetSync commit.
+          git commit --amend \
+            -m "$NEW_MESSAGE" \
+            --no-edit=false
+
+          # Update GitHub without creating an additional commit.
+          git push --force-with-lease origin HEAD:main
