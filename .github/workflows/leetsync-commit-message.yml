@@ -1,11 +1,10 @@
-name: Fix LeetSync Commit Messages
+name: Format LeetSync Commit Messages
 on:
   push:
     branches: [main]
 
 jobs:
   reword:
-    if: github.event.head_commit.author.email == 'leetsync-bot@example.com'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,11 +12,20 @@ jobs:
           fetch-depth: 2
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Reword last commit
+      - name: Reformat commit message
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
+
           OLD_MSG=$(git log -1 --pretty=%B)
-          NEW_MSG=$(echo "$OLD_MSG" | sed -E 's/synced (.+)/Solve: \1/')
-          git commit --amend -m "$NEW_MSG"
-          git push --force
+
+          # Extract "<number>. <Title>" pattern from the LeetSync message
+          if [[ $OLD_MSG =~ ([0-9]+)\.\ ([^|,\n]+) ]]; then
+            NUM="${BASH_REMATCH[1]}"
+            TITLE=$(echo "${BASH_REMATCH[2]}" | sed 's/[[:space:]]*$//')
+            NEW_MSG="#${NUM} - ${TITLE} | LeetCode"
+            git commit --amend -m "$NEW_MSG"
+            git push --force
+          else
+            echo "Pattern not found, leaving message as is: $OLD_MSG"
+          fi
